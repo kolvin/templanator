@@ -1,0 +1,58 @@
+# Global Args
+ARG NGINX_TAG=stable-alpine
+ARG NODE_TAG=lts-alpine3.15
+ARG NODE_ENV=production
+
+# Install dependecies in ephemeral container
+FROM node:$NODE_TAG as deps
+ARG NPM_TOKEN=''
+ENV NODE_ENV=$NODE_ENV
+WORKDIR /app
+
+# Copy over dependency files
+COPY app/package*json /app/
+
+# Install non dev dependencies
+RUN echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > .npmrc && \
+   npm ci --only=production && \
+   rm -f .npmrc
+
+# Build src in another ephemeral container
+FROM node:$NODE_TAG as build
+WORKDIR /app
+
+# Copy over app
+COPY app/ .
+
+# Copy over deps
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+
+# Generate build
+RUN npm run build
+
+FROM nginx:$NGINX_TAG as cloud
+COPY --from=build /app/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+
+FROM node:$NODE_TAG as dev
+ARG NODE_ENV=development
+ENV NODE_ENV=$NODE_ENV
+WORKDIR /app
+
+# Copy over app
+COPY app/ .
+
+RUN mkdir -p node_modules && \
+    chown node:node node_modules
+
+# Copy over non-dev deps
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+
+# Install dev deps
+RUN npm install
+
+# Switch to non root user
+USER node:node
+EXPOSE 3000
+CMD ["npm", "run", "start"]

@@ -17,3 +17,14 @@ repos:
     hooks:
       - id: doctoc
         args: ["--title=## Contents", "--github"]
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.76.0
+    hooks:
+      - id: terraform_fmt
+      - id: terraform_docs
+      - id: terraform_tflint
+  - repo: https://github.com/gruntwork-io/pre-commit
+    rev: v0.1.17 # Get the latest from: https://github.com/gruntwork-io/pre-commit/releases
+    hooks:
+    - id: shellcheck
+    - id: terragrunt-hclfmt

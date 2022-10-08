@@ -1,0 +1,66 @@
+# Global Args
+ARG NODE_TAG=latest
+ARG NODE_ENV=production
+
+# Install dependecies in ephemeral container
+FROM node:$NODE_TAG as deps
+ARG NPM_TOKEN=''
+ENV NODE_ENV=$NODE_ENV
+WORKDIR /build
+
+# Copy over dependency files
+COPY app/package.json .
+
+# Install dependencies
+RUN npm i -g pnpm
+RUN pnpm install -P
+
+# Build src in another ephemeral container
+FROM node:$NODE_TAG as build
+WORKDIR /build
+
+# Copy over app
+COPY app/ .
+
+# Copy over deps
+COPY --chown=node:node --from=deps /build/node_modules .
+
+# Install dev deps
+RUN npm i -g pnpm
+RUN pnpm install
+
+# Complie typescript build
+RUN pnpm run build
+
+FROM node:$NODE_TAG as cloud
+WORKDIR /dist
+RUN chown node /dist
+COPY --chown=node:node --from=deps /build/node_modules node_modules
+COPY --chown=node:node --from=build /build/dist .
+# Switch to non root user
+USER node:node
+ENTRYPOINT [ "node", "demo.js" ]
+
+FROM node:$NODE_TAG as dev
+ARG NODE_ENV=development
+ENV NODE_ENV=$NODE_ENV
+
+WORKDIR /app
+RUN chown node /app
+
+# Copy over app
+COPY app/ .
+
+RUN mkdir -p node_modules && \
+    chown node:node node_modules
+
+# Copy over all deps
+COPY --chown=node:node --from=build /build/node_modules node_modules
+
+# Install dev dependencies
+RUN npm i -g pnpm
+RUN pnpm install
+
+# Switch to non root user
+USER node:node
+CMD ["pnpm", "run", "dev"]
